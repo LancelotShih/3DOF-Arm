@@ -1,3 +1,6 @@
+/* ABOUTME: Connects STM32 timers and GPIO alternate functions to the arm servo outputs.
+ * ABOUTME: Enables TIM3 and assigns PB0/PB1/PB4/PB5 as PWM pins for the four servo channels.
+ */
 /* USER CODE BEGIN Header */
 /**
   ******************************************************************************

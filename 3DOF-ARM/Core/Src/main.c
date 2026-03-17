@@ -1,3 +1,6 @@
+/* ABOUTME: Initializes the STM32 board and brings up the 3DOF arm firmware.
+ * ABOUTME: Configures TIM3 for servo PWM output and runs a visible servo motion pattern for bring-up.
+ */
 /* USER CODE BEGIN Header */
 /**
   ******************************************************************************
@@ -21,6 +24,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "pwm_control.h"
 
 /* USER CODE END Includes */
 
@@ -31,6 +35,10 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define SERVO_SWEEP_MIN_ANGLE_DEGREES 0U
+#define SERVO_SWEEP_MAX_ANGLE_DEGREES 180U
+#define SERVO_SWEEP_STEP_DEGREES 2U
+#define SERVO_SWEEP_DELAY_MS 25U
 
 /* USER CODE END PD */
 
@@ -43,6 +51,8 @@
 TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
+static uint16_t servo_angle_degrees = 180U;
+static int8_t servo_sweep_direction = 1;
 
 /* USER CODE END PV */
 
@@ -51,6 +61,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
+static void SetAllServoAngles(uint16_t angle_degrees);
 
 /* USER CODE END PFP */
 
@@ -90,6 +101,15 @@ int main(void)
   MX_GPIO_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
+  // Start the PWM channels
+  if ((PWM_Control_Start(&htim3, TIM_CHANNEL_1) != HAL_OK) ||
+      (PWM_Control_Start(&htim3, TIM_CHANNEL_2) != HAL_OK) ||
+      (PWM_Control_Start(&htim3, TIM_CHANNEL_3) != HAL_OK) ||
+      (PWM_Control_Start(&htim3, TIM_CHANNEL_4) != HAL_OK))
+  {
+    Error_Handler();
+  }
+  SetAllServoAngles(servo_angle_degrees);
 
   /* USER CODE END 2 */
 
@@ -100,6 +120,13 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    servo_angle_degrees = PWM_Control_NextSweepAngle(servo_angle_degrees,
+                                                     &servo_sweep_direction,
+                                                     SERVO_SWEEP_MIN_ANGLE_DEGREES,
+                                                     SERVO_SWEEP_MAX_ANGLE_DEGREES,
+                                                     SERVO_SWEEP_STEP_DEGREES);
+    SetAllServoAngles(servo_angle_degrees);
+    HAL_Delay(SERVO_SWEEP_DELAY_MS);
   }
   /* USER CODE END 3 */
 }
@@ -165,7 +192,7 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 179;
+  htim3.Init.Prescaler = 15;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim3.Init.Period = 19999;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -236,6 +263,16 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+static void SetAllServoAngles(uint16_t angle_degrees)
+{
+  if ((PWM_Control_SetAngle(&htim3, TIM_CHANNEL_1, angle_degrees) != HAL_OK) ||
+      (PWM_Control_SetAngle(&htim3, TIM_CHANNEL_2, angle_degrees) != HAL_OK) ||
+      (PWM_Control_SetAngle(&htim3, TIM_CHANNEL_3, angle_degrees) != HAL_OK) ||
+      (PWM_Control_SetAngle(&htim3, TIM_CHANNEL_4, angle_degrees) != HAL_OK))
+  {
+    Error_Handler();
+  }
+}
 
 /* USER CODE END 4 */
 
