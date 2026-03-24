@@ -16,8 +16,16 @@ def list_ports():
     return [p.device for p in serial.tools.list_ports.comports()]
 
 
+# Per-channel config: (ch_num, label, default_angle, min_angle, max_angle)
+CHANNELS = [
+    (1, "Base",   90,  0,   180),
+    (2, "Height", 90,  40,  120),
+    (3, "Depth",  102, 55,  150),
+    (4, "Claw",   0,   0,   180),  # TODO: update limits once the clamp servo is installed properly (clamp screws are currently missing)
+]
+
+
 class ServoGUI:
-    CHANNELS = [1, 2, 3, 4]
     BAUD_RATE = 115200
 
     def __init__(self, root):
@@ -25,6 +33,7 @@ class ServoGUI:
         self.root.title("3DOF Arm Servo Control")
         self.root.resizable(False, False)
         self.ser = None
+        self.channel_vars = {}  # ch_num -> IntVar
 
         self._build_connection_frame()
         self._build_servo_frame()
@@ -51,34 +60,43 @@ class ServoGUI:
         self._refresh_ports()
 
     def _build_servo_frame(self):
-        frame = ttk.LabelFrame(self.root, text="Servo Command", padding=8)
+        frame = ttk.LabelFrame(self.root, text="Servo Channels", padding=8)
         frame.grid(row=1, column=0, padx=10, pady=4, sticky="ew")
 
-        ttk.Label(frame, text="Channel:").grid(row=0, column=0, sticky="w")
-        self.channel_var = tk.IntVar(value=1)
-        channel_combo = ttk.Combobox(
-            frame, textvariable=self.channel_var,
-            values=self.CHANNELS, width=4, state="readonly"
+        self.send_btns = []
+
+        for row_idx, (ch_num, label, default, ch_min, ch_max) in enumerate(CHANNELS):
+            angle_var = tk.IntVar(value=default)
+            self.channel_vars[ch_num] = angle_var
+
+            ttk.Label(frame, text=f"Ch {ch_num} – {label}:", width=14, anchor="w").grid(
+                row=row_idx, column=0, sticky="w", pady=3
+            )
+
+            slider = ttk.Scale(
+                frame, from_=ch_min, to=ch_max, orient="horizontal",
+                variable=angle_var, length=260,
+                command=lambda val, v=angle_var, lo=ch_min, hi=ch_max: v.set(max(lo, min(hi, int(float(val)))))
+            )
+            slider.grid(row=row_idx, column=1, padx=(8, 6))
+
+            entry = ttk.Entry(frame, textvariable=angle_var, width=5)
+            entry.grid(row=row_idx, column=2, padx=(0, 8))
+            entry.bind("<Return>",   lambda e, v=angle_var, lo=ch_min, hi=ch_max: self._clamp_entry(v, lo, hi))
+            entry.bind("<FocusOut>", lambda e, v=angle_var, lo=ch_min, hi=ch_max: self._clamp_entry(v, lo, hi))
+
+            btn = ttk.Button(
+                frame, text="Send",
+                command=lambda n=ch_num, v=angle_var, lo=ch_min, hi=ch_max: self._send_command(n, v.get(), lo, hi),
+                state="disabled"
+            )
+            btn.grid(row=row_idx, column=3)
+            self.send_btns.append(btn)
+
+        self.reset_btn = ttk.Button(
+            frame, text="Reset to Defaults", command=self._reset_to_defaults, state="disabled"
         )
-        channel_combo.grid(row=0, column=1, padx=(4, 16), sticky="w")
-
-        ttk.Label(frame, text="Angle (0–180°):").grid(row=0, column=2, sticky="w")
-        self.angle_var = tk.IntVar(value=90)
-
-        self.slider = ttk.Scale(
-            frame, from_=0, to=180, orient="horizontal",
-            variable=self.angle_var, length=220,
-            command=self._on_slider
-        )
-        self.slider.grid(row=0, column=3, padx=(4, 8))
-
-        self.angle_entry = ttk.Entry(frame, textvariable=self.angle_var, width=5)
-        self.angle_entry.grid(row=0, column=4, padx=(0, 8))
-        self.angle_entry.bind("<Return>", self._on_entry)
-        self.angle_entry.bind("<FocusOut>", self._on_entry)
-
-        self.send_btn = ttk.Button(frame, text="Send", command=self._send_command, state="disabled")
-        self.send_btn.grid(row=0, column=5)
+        self.reset_btn.grid(row=len(CHANNELS), column=0, columnspan=4, pady=(8, 2))
 
     def _build_status_bar(self):
         self.status_var = tk.StringVar(value="Disconnected")
@@ -115,7 +133,9 @@ class ServoGUI:
         try:
             self.ser = serial.Serial(port, self.BAUD_RATE, timeout=0.1)
             self.connect_btn.config(text="Disconnect")
-            self.send_btn.config(state="normal")
+            for btn in self.send_btns:
+                btn.config(state="normal")
+            self.reset_btn.config(state="normal")
             self.status_var.set(f"Connected: {port} @ {self.BAUD_RATE} baud")
             self._poll_rx()
         except serial.SerialException as e:
@@ -126,7 +146,9 @@ class ServoGUI:
             self.ser.close()
             self.ser = None
         self.connect_btn.config(text="Connect")
-        self.send_btn.config(state="disabled")
+        for btn in self.send_btns:
+            btn.config(state="disabled")
+        self.reset_btn.config(state="disabled")
         self.status_var.set("Disconnected")
 
     def _poll_rx(self):
@@ -140,26 +162,31 @@ class ServoGUI:
             pass
         self.root.after(50, self._poll_rx)
 
-    def _on_slider(self, _event=None):
-        self.angle_var.set(int(float(self.angle_var.get())))
+    def _reset_to_defaults(self):
+        for ch_num, _label, default, _lo, _hi in CHANNELS:
+            self.channel_vars[ch_num].set(default)
+        self._send_reset_step(list(CHANNELS), 0)
 
-    def _on_entry(self, _event=None):
+    def _send_reset_step(self, channels, index):
+        if index >= len(channels):
+            return
+        ch_num, _label, default, ch_min, ch_max = channels[index]
+        self._send_command(ch_num, default, ch_min, ch_max)
+        self.root.after(100, lambda: self._send_reset_step(channels, index + 1))
+
+    def _clamp_entry(self, var, lo, hi):
         try:
-            val = int(self.angle_entry.get())
-            val = max(0, min(180, val))
-            self.angle_var.set(val)
-        except ValueError:
-            self.angle_var.set(90)
+            val = max(lo, min(hi, int(var.get())))
+            var.set(val)
+        except (ValueError, tk.TclError):
+            var.set(lo)
 
-    def _send_command(self):
+    def _send_command(self, channel, angle, lo, hi):
         if not self.ser or not self.ser.is_open:
             self.status_var.set("Not connected.")
             return
 
-        channel = self.channel_var.get()
-        angle = int(self.angle_var.get())
-        angle = max(0, min(180, angle))
-
+        angle = max(lo, min(hi, int(angle)))
         command = f"S{channel}:{angle}\n"
         try:
             self.ser.write(command.encode("ascii"))
