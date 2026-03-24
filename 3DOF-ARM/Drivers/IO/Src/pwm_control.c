@@ -6,8 +6,8 @@
 
 extern TIM_HandleTypeDef htim3;
 
-#define PWM_CONTROL_MIN_PULSE_TICKS 1000U
-#define PWM_CONTROL_MAX_PULSE_TICKS 2000U
+#define PWM_CONTROL_MIN_PULSE_TICKS 500U
+#define PWM_CONTROL_MAX_PULSE_TICKS 2500U
 
 void SetAllServoAngles(uint16_t angle_degrees)
 {
@@ -52,7 +52,7 @@ static uint32_t PWM_Control_CompareFromAngle(uint16_t angle_degrees)
   return PWM_CONTROL_MIN_PULSE_TICKS + ((pulse_span * clamped_angle) / PWM_CONTROL_MAX_ANGLE_DEGREES);
 }
 
-HAL_StatusTypeDef PWM_Control_Start(TIM_HandleTypeDef *htim, uint32_t channel)
+HAL_StatusTypeDef PWM_Control_Start(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t reset_angle_degrees)
 {
   HAL_StatusTypeDef status;
 
@@ -61,7 +61,7 @@ HAL_StatusTypeDef PWM_Control_Start(TIM_HandleTypeDef *htim, uint32_t channel)
     return HAL_ERROR;
   }
 
-  __HAL_TIM_SET_COMPARE(htim, channel, PWM_Control_CompareFromAngle(PWM_CONTROL_RESET_ANGLE_DEGREES));
+  __HAL_TIM_SET_COMPARE(htim, channel, PWM_Control_CompareFromAngle(reset_angle_degrees));
   status = HAL_TIM_PWM_Start(htim, channel);
 
   return status;
@@ -79,9 +79,9 @@ HAL_StatusTypeDef PWM_Control_SetAngle(TIM_HandleTypeDef *htim, uint32_t channel
   return HAL_OK;
 }
 
-HAL_StatusTypeDef PWM_Control_ResetAngle(TIM_HandleTypeDef *htim, uint32_t channel)
+HAL_StatusTypeDef PWM_Control_ResetAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t reset_angle_degrees)
 {
-  return PWM_Control_SetAngle(htim, channel, PWM_CONTROL_RESET_ANGLE_DEGREES);
+  return PWM_Control_SetAngle(htim, channel, reset_angle_degrees);
 }
 
 uint16_t PWM_Control_NextSweepAngle(uint16_t current_angle_degrees, int8_t *direction, uint16_t minimum_angle_degrees, uint16_t maximum_angle_degrees, uint16_t step_degrees)

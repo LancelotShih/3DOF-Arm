@@ -101,10 +101,10 @@ int main(void)
   MX_TIM3_Init();
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
-  if ((PWM_Control_Start(&htim3, TIM_CHANNEL_1) != HAL_OK) ||
-      (PWM_Control_Start(&htim3, TIM_CHANNEL_2) != HAL_OK) ||
-      (PWM_Control_Start(&htim3, TIM_CHANNEL_3) != HAL_OK) ||
-      (PWM_Control_Start(&htim3, TIM_CHANNEL_4) != HAL_OK))
+  if ((PWM_Control_Start(&htim3, TIM_CHANNEL_1, PWM_CONTROL_RESET_BASE_ANGLE_DEGREES) != HAL_OK) ||
+      (PWM_Control_Start(&htim3, TIM_CHANNEL_2, PWM_CONTROL_RESET_HEIGHT_ANGLE_DEGREES) != HAL_OK) ||
+      (PWM_Control_Start(&htim3, TIM_CHANNEL_3, PWM_CONTROL_RESET_DEPTH_ANGLE_DEGREES) != HAL_OK) ||
+      (PWM_Control_Start(&htim3, TIM_CHANNEL_4, PWM_CONTROL_RESET_CLAW_ANGLE_DEGREES) != HAL_OK))
   {
     Error_Handler();
   }
