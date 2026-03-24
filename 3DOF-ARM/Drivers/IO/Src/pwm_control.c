@@ -2,9 +2,23 @@
  * ABOUTME: Uses a 50 Hz PWM frame with 1 ms to 2 ms pulses for 0 to 180 degree commands.
  */
 #include "pwm_control.h"
+#include "main.h"
+
+extern TIM_HandleTypeDef htim3;
 
 #define PWM_CONTROL_MIN_PULSE_TICKS 1000U
 #define PWM_CONTROL_MAX_PULSE_TICKS 2000U
+
+void SetAllServoAngles(uint16_t angle_degrees)
+{
+  if ((PWM_Control_SetAngle(&htim3, TIM_CHANNEL_1, angle_degrees) != HAL_OK) ||
+      (PWM_Control_SetAngle(&htim3, TIM_CHANNEL_2, angle_degrees) != HAL_OK) ||
+      (PWM_Control_SetAngle(&htim3, TIM_CHANNEL_3, angle_degrees) != HAL_OK) ||
+      (PWM_Control_SetAngle(&htim3, TIM_CHANNEL_4, angle_degrees) != HAL_OK))
+  {
+    Error_Handler();
+  }
+}
 
 static uint8_t PWM_Control_ChannelIsSupported(uint32_t channel)
 {

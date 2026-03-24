@@ -14,5 +14,6 @@ HAL_StatusTypeDef PWM_Control_Start(TIM_HandleTypeDef *htim, uint32_t channel);
 HAL_StatusTypeDef PWM_Control_SetAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t angle_degrees);
 HAL_StatusTypeDef PWM_Control_ResetAngle(TIM_HandleTypeDef *htim, uint32_t channel);
 uint16_t PWM_Control_NextSweepAngle(uint16_t current_angle_degrees, int8_t *direction, uint16_t minimum_angle_degrees, uint16_t maximum_angle_degrees, uint16_t step_degrees);
+void SetAllServoAngles(uint16_t angle_degrees);
 
 #endif /* PWM_CONTROL_H */
