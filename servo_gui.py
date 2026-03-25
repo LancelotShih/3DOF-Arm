@@ -172,7 +172,7 @@ class ServoGUI:
             return
         ch_num, _label, default, ch_min, ch_max = channels[index]
         self._send_command(ch_num, default, ch_min, ch_max)
-        self.root.after(100, lambda: self._send_reset_step(channels, index + 1))
+        self.root.after(500, lambda: self._send_reset_step(channels, index + 1))
 
     def _clamp_entry(self, var, lo, hi):
         try:

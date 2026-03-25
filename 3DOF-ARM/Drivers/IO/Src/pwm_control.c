@@ -9,6 +9,15 @@ extern TIM_HandleTypeDef htim3;
 #define PWM_CONTROL_MIN_PULSE_TICKS 500U
 #define PWM_CONTROL_MAX_PULSE_TICKS 2500U
 
+/* Slew state — one entry per supported channel (indices 0-3 for CH1-CH4) */
+#define SLEW_CHANNEL_COUNT 4U
+static const uint32_t slew_channel_ids[SLEW_CHANNEL_COUNT] = {
+    TIM_CHANNEL_1, TIM_CHANNEL_2, TIM_CHANNEL_3, TIM_CHANNEL_4
+};
+static uint16_t slew_current[SLEW_CHANNEL_COUNT];
+static uint16_t slew_target[SLEW_CHANNEL_COUNT];
+static uint8_t PWM_Control_SlewIndex(uint32_t channel);
+
 void SetAllServoAngles(uint16_t angle_degrees)
 {
   if ((PWM_Control_SetAngle(&htim3, TIM_CHANNEL_1, angle_degrees) != HAL_OK) ||
@@ -61,7 +70,15 @@ HAL_StatusTypeDef PWM_Control_Start(TIM_HandleTypeDef *htim, uint32_t channel, u
     return HAL_ERROR;
   }
 
-  __HAL_TIM_SET_COMPARE(htim, channel, PWM_Control_CompareFromAngle(reset_angle_degrees));
+  uint16_t clamped = PWM_Control_ClampAngle(reset_angle_degrees);
+  uint8_t idx = PWM_Control_SlewIndex(channel);
+  if (idx < SLEW_CHANNEL_COUNT)
+  {
+    slew_current[idx] = clamped;
+    slew_target[idx]  = clamped;
+  }
+
+  __HAL_TIM_SET_COMPARE(htim, channel, PWM_Control_CompareFromAngle(clamped));
   status = HAL_TIM_PWM_Start(htim, channel);
 
   return status;
@@ -120,4 +137,59 @@ uint16_t PWM_Control_NextSweepAngle(uint16_t current_angle_degrees, int8_t *dire
   }
 
   return clamped_current - step_degrees;
+}
+
+/* Return the slew state index for a given channel, or SLEW_CHANNEL_COUNT if unsupported. */
+static uint8_t PWM_Control_SlewIndex(uint32_t channel)
+{
+  for (uint8_t i = 0U; i < SLEW_CHANNEL_COUNT; i++)
+  {
+    if (slew_channel_ids[i] == channel)
+    {
+      return i;
+    }
+  }
+  return SLEW_CHANNEL_COUNT;
+}
+
+void PWM_Control_SetTarget(uint32_t channel, uint16_t angle_degrees)
+{
+  uint8_t idx = PWM_Control_SlewIndex(channel);
+  if (idx < SLEW_CHANNEL_COUNT)
+  {
+    slew_target[idx] = PWM_Control_ClampAngle(angle_degrees);
+  }
+}
+
+void PWM_Control_SlewUpdate(TIM_HandleTypeDef *htim)
+{
+  if (htim == 0)
+  {
+    return;
+  }
+
+  for (uint8_t i = 0U; i < SLEW_CHANNEL_COUNT; i++)
+  {
+    uint16_t cur = slew_current[i];
+    uint16_t tgt = slew_target[i];
+
+    if (cur == tgt)
+    {
+      continue;
+    }
+
+    if (cur < tgt)
+    {
+      cur = (uint16_t)(cur + PWM_CONTROL_SLEW_STEP_DEG);
+      if (cur > tgt) { cur = tgt; }
+    }
+    else
+    {
+      cur = (uint16_t)(cur - PWM_CONTROL_SLEW_STEP_DEG);
+      if (cur < tgt) { cur = tgt; }
+    }
+
+    slew_current[i] = cur;
+    __HAL_TIM_SET_COMPARE(htim, slew_channel_ids[i], PWM_Control_CompareFromAngle(cur));
+  }
 }

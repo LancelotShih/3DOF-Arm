@@ -52,6 +52,7 @@ static uint8_t rx_byte;
 static uint8_t rx_buf[UART_RX_BUF_SIZE];
 static uint8_t rx_idx = 0U;
 static uint32_t last_ready_tick = 0U;
+static uint32_t last_slew_tick = 0U;
 
 /* USER CODE END PV */
 
@@ -125,6 +126,12 @@ int main(void)
       last_ready_tick = HAL_GetTick();
     }
 
+    if ((HAL_GetTick() - last_slew_tick) >= PWM_CONTROL_SLEW_INTERVAL_MS)
+    {
+      PWM_Control_SlewUpdate(&htim3);
+      last_slew_tick = HAL_GetTick();
+    }
+
     if (__HAL_UART_GET_FLAG(&huart3, UART_FLAG_RXNE) &&
         HAL_UART_Receive(&huart3, &rx_byte, 1U, 1U) == HAL_OK)
     {
@@ -141,10 +148,10 @@ int main(void)
 
           switch (ch)
           {
-            case 1: PWM_Control_SetAngle(&htim3, TIM_CHANNEL_1, angle); break;
-            case 2: PWM_Control_SetAngle(&htim3, TIM_CHANNEL_2, angle); break;
-            case 3: PWM_Control_SetAngle(&htim3, TIM_CHANNEL_3, angle); break;
-            case 4: PWM_Control_SetAngle(&htim3, TIM_CHANNEL_4, angle); break;
+            case 1: PWM_Control_SetTarget(TIM_CHANNEL_1, angle); break;
+            case 2: PWM_Control_SetTarget(TIM_CHANNEL_2, angle); break;
+            case 3: PWM_Control_SetTarget(TIM_CHANNEL_3, angle); break;
+            case 4: PWM_Control_SetTarget(TIM_CHANNEL_4, angle); break;
             default: HAL_UART_Transmit(&huart3, (uint8_t *)"ERR\n", 4U, 100U); break;
           }
           HAL_UART_Transmit(&huart3, (uint8_t *)"ACK\n", 4U, 100U);
