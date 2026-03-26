@@ -21,6 +21,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "pwm_control.h"
+#include <stdlib.h>
 
 /* USER CODE END Includes */
 
@@ -31,6 +33,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define UART_RX_BUF_SIZE 16U
 
 /* USER CODE END PD */
 
@@ -42,7 +45,14 @@
 /* Private variables ---------------------------------------------------------*/
 TIM_HandleTypeDef htim3;
 
+UART_HandleTypeDef huart3;
+
 /* USER CODE BEGIN PV */
+static uint8_t rx_byte;
+static uint8_t rx_buf[UART_RX_BUF_SIZE];
+static uint8_t rx_idx = 0U;
+static uint32_t last_ready_tick = 0U;
+static uint32_t last_slew_tick = 0U;
 
 /* USER CODE END PV */
 
@@ -50,6 +60,7 @@ TIM_HandleTypeDef htim3;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_TIM3_Init(void);
+static void MX_USART3_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -89,7 +100,16 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_TIM3_Init();
+  MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
+  if ((PWM_Control_Start(&htim3, TIM_CHANNEL_1, PWM_CONTROL_RESET_BASE_ANGLE_DEGREES) != HAL_OK) ||
+      (PWM_Control_Start(&htim3, TIM_CHANNEL_2, PWM_CONTROL_RESET_HEIGHT_ANGLE_DEGREES) != HAL_OK) ||
+      (PWM_Control_Start(&htim3, TIM_CHANNEL_3, PWM_CONTROL_RESET_DEPTH_ANGLE_DEGREES) != HAL_OK) ||
+      (PWM_Control_Start(&htim3, TIM_CHANNEL_4, PWM_CONTROL_RESET_CLAW_ANGLE_DEGREES) != HAL_OK))
+  {
+    Error_Handler();
+  }
+  HAL_UART_Transmit(&huart3, (uint8_t *)"READY\n", 6U, 100U);
 
   /* USER CODE END 2 */
 
@@ -100,6 +120,54 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    if ((HAL_GetTick() - last_ready_tick) >= 1000U)
+    {
+      HAL_UART_Transmit(&huart3, (uint8_t *)"READY\n", 6U, 100U);
+      last_ready_tick = HAL_GetTick();
+    }
+
+    if ((HAL_GetTick() - last_slew_tick) >= PWM_CONTROL_SLEW_INTERVAL_MS)
+    {
+      PWM_Control_SlewUpdate(&htim3);
+      last_slew_tick = HAL_GetTick();
+    }
+
+    if (__HAL_UART_GET_FLAG(&huart3, UART_FLAG_RXNE) &&
+        HAL_UART_Receive(&huart3, &rx_byte, 1U, 1U) == HAL_OK)
+    {
+      if (rx_byte == '\n')
+      {
+        uint8_t command_ok = 0U;
+        /* Capture the received line length before resetting the buffer index. */
+        uint8_t command_length = rx_idx;
+
+        rx_buf[rx_idx] = '\0';
+        rx_idx = 0U;
+
+        /* Parse "S<ch>:<angle>", e.g. "S1:90" */
+        /* Require a complete line so short inputs cannot reuse stale bytes. */
+        if ((command_length >= 4U) && (rx_buf[0] == 'S') && (rx_buf[2] == ':'))
+        {
+          uint8_t ch = rx_buf[1] - '0';
+          uint16_t angle = (uint16_t)atoi((char *)&rx_buf[3]);
+
+          switch (ch)
+          {
+            case 1: PWM_Control_SetTarget(TIM_CHANNEL_1, angle); command_ok = 1U; break;
+            case 2: PWM_Control_SetTarget(TIM_CHANNEL_2, angle); command_ok = 1U; break;
+            case 3: PWM_Control_SetTarget(TIM_CHANNEL_3, angle); command_ok = 1U; break;
+            case 4: PWM_Control_SetTarget(TIM_CHANNEL_4, angle); command_ok = 1U; break;
+            default: break;
+          }
+        }
+        /* Reply once per line so the host never sees both ACK and ERR. */
+        HAL_UART_Transmit(&huart3, (uint8_t *)(command_ok ? "ACK\n" : "ERR\n"), 4U, 100U);
+      }
+      else if (rx_idx < UART_RX_BUF_SIZE - 1U)
+      {
+        rx_buf[rx_idx++] = rx_byte;
+      }
+    }
   }
   /* USER CODE END 3 */
 }
@@ -165,7 +233,7 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 179;
+  htim3.Init.Prescaler = 15;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim3.Init.Period = 19999;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -217,18 +285,60 @@ static void MX_TIM3_Init(void)
 }
 
 /**
+  * @brief USART3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART3_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART3_Init 0 */
+
+  /* USER CODE END USART3_Init 0 */
+
+  /* USER CODE BEGIN USART3_Init 1 */
+
+  /* USER CODE END USART3_Init 1 */
+  huart3.Instance = USART3;
+  huart3.Init.BaudRate = 115200;
+  huart3.Init.WordLength = UART_WORDLENGTH_8B;
+  huart3.Init.StopBits = UART_STOPBITS_1;
+  huart3.Init.Parity = UART_PARITY_NONE;
+  huart3.Init.Mode = UART_MODE_TX_RX;
+  huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart3.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART3_Init 2 */
+
+  /* USER CODE END USART3_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
   */
 static void MX_GPIO_Init(void)
 {
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
   /* USER CODE BEGIN MX_GPIO_Init_1 */
 
   /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
+
+  /*Configure GPIO pin : PC13 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -236,6 +346,16 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+// static void SetAllServoAngles(uint16_t angle_degrees)
+// {
+//   if ((PWM_Control_SetAngle(&htim3, TIM_CHANNEL_1, angle_degrees) != HAL_OK) ||
+//       (PWM_Control_SetAngle(&htim3, TIM_CHANNEL_2, angle_degrees) != HAL_OK) ||
+//       (PWM_Control_SetAngle(&htim3, TIM_CHANNEL_3, angle_degrees) != HAL_OK) ||
+//       (PWM_Control_SetAngle(&htim3, TIM_CHANNEL_4, angle_degrees) != HAL_OK))
+//   {
+//     Error_Handler();
+//   }
+// }
 
 /* USER CODE END 4 */
 
