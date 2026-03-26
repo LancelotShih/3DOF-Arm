@@ -22,5 +22,6 @@ uint16_t PWM_Control_NextSweepAngle(uint16_t current_angle_degrees, int8_t *dire
 void SetAllServoAngles(uint16_t angle_degrees);
 void PWM_Control_SetTarget(uint32_t channel, uint16_t angle_degrees);
 void PWM_Control_SlewUpdate(TIM_HandleTypeDef *htim);
+uint16_t PWM_Control_GetCurrentAngle(uint32_t channel);
 
 #endif /* PWM_CONTROL_H */

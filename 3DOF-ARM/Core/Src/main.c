@@ -21,6 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "oled_status.h"
 #include "pwm_control.h"
 #include <stdlib.h>
 
@@ -34,6 +35,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define UART_RX_BUF_SIZE 16U
+#define OLED_REFRESH_INTERVAL_MS 100U
 
 /* USER CODE END PD */
 
@@ -43,6 +45,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+I2C_HandleTypeDef hi2c2;
+
 TIM_HandleTypeDef htim3;
 
 UART_HandleTypeDef huart3;
@@ -53,15 +57,19 @@ static uint8_t rx_buf[UART_RX_BUF_SIZE];
 static uint8_t rx_idx = 0U;
 static uint32_t last_ready_tick = 0U;
 static uint32_t last_slew_tick = 0U;
+static uint32_t last_oled_tick = 0U;
+static uint8_t oled_ready = 0U;
 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_I2C2_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_USART3_UART_Init(void);
 /* USER CODE BEGIN PFP */
+static void UpdateServoDisplay(void);
 
 /* USER CODE END PFP */
 
@@ -99,6 +107,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_I2C2_Init();
   MX_TIM3_Init();
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
@@ -109,6 +118,14 @@ int main(void)
   {
     Error_Handler();
   }
+
+  if (OLED_Status_Init() == HAL_OK)
+  {
+    oled_ready = 1U;
+    UpdateServoDisplay();
+    last_oled_tick = HAL_GetTick();
+  }
+
   HAL_UART_Transmit(&huart3, (uint8_t *)"READY\n", 6U, 100U);
 
   /* USER CODE END 2 */
@@ -130,6 +147,12 @@ int main(void)
     {
       PWM_Control_SlewUpdate(&htim3);
       last_slew_tick = HAL_GetTick();
+    }
+
+    if ((oled_ready != 0U) && ((HAL_GetTick() - last_oled_tick) >= OLED_REFRESH_INTERVAL_MS))
+    {
+      UpdateServoDisplay();
+      last_oled_tick = HAL_GetTick();
     }
 
     if (__HAL_UART_GET_FLAG(&huart3, UART_FLAG_RXNE) &&
@@ -211,6 +234,39 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief I2C2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C2_Init(void)
+{
+
+  /* USER CODE BEGIN I2C2_Init 0 */
+
+  /* USER CODE END I2C2_Init 0 */
+
+  /* USER CODE BEGIN I2C2_Init 1 */
+
+  /* USER CODE END I2C2_Init 1 */
+  hi2c2.Instance = I2C2;
+  hi2c2.Init.ClockSpeed = 400000;
+  hi2c2.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c2.Init.OwnAddress1 = 0;
+  hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c2.Init.OwnAddress2 = 0;
+  hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C2_Init 2 */
+
+  /* USER CODE END I2C2_Init 2 */
 }
 
 /**
@@ -346,6 +402,21 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+static void UpdateServoDisplay(void)
+{
+  uint16_t angles[OLED_STATUS_SERVO_COUNT] = {
+    PWM_Control_GetCurrentAngle(TIM_CHANNEL_1),
+    PWM_Control_GetCurrentAngle(TIM_CHANNEL_2),
+    PWM_Control_GetCurrentAngle(TIM_CHANNEL_3),
+    PWM_Control_GetCurrentAngle(TIM_CHANNEL_4)
+  };
+
+  if (OLED_Status_ShowAngles(angles) != HAL_OK)
+  {
+    oled_ready = 0U;
+  }
+}
+
 // static void SetAllServoAngles(uint16_t angle_degrees)
 // {
 //   if ((PWM_Control_SetAngle(&htim3, TIM_CHANNEL_1, angle_degrees) != HAL_OK) ||
