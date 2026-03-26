@@ -137,25 +137,31 @@ int main(void)
     {
       if (rx_byte == '\n')
       {
+        uint8_t command_ok = 0U;
+        /* Capture the received line length before resetting the buffer index. */
+        uint8_t command_length = rx_idx;
+
         rx_buf[rx_idx] = '\0';
         rx_idx = 0U;
 
         /* Parse "S<ch>:<angle>", e.g. "S1:90" */
-        if (rx_buf[0] == 'S' && rx_buf[2] == ':')
+        /* Require a complete line so short inputs cannot reuse stale bytes. */
+        if ((command_length >= 4U) && (rx_buf[0] == 'S') && (rx_buf[2] == ':'))
         {
           uint8_t ch = rx_buf[1] - '0';
           uint16_t angle = (uint16_t)atoi((char *)&rx_buf[3]);
 
           switch (ch)
           {
-            case 1: PWM_Control_SetTarget(TIM_CHANNEL_1, angle); break;
-            case 2: PWM_Control_SetTarget(TIM_CHANNEL_2, angle); break;
-            case 3: PWM_Control_SetTarget(TIM_CHANNEL_3, angle); break;
-            case 4: PWM_Control_SetTarget(TIM_CHANNEL_4, angle); break;
-            default: HAL_UART_Transmit(&huart3, (uint8_t *)"ERR\n", 4U, 100U); break;
+            case 1: PWM_Control_SetTarget(TIM_CHANNEL_1, angle); command_ok = 1U; break;
+            case 2: PWM_Control_SetTarget(TIM_CHANNEL_2, angle); command_ok = 1U; break;
+            case 3: PWM_Control_SetTarget(TIM_CHANNEL_3, angle); command_ok = 1U; break;
+            case 4: PWM_Control_SetTarget(TIM_CHANNEL_4, angle); command_ok = 1U; break;
+            default: break;
           }
-          HAL_UART_Transmit(&huart3, (uint8_t *)"ACK\n", 4U, 100U);
         }
+        /* Reply once per line so the host never sees both ACK and ERR. */
+        HAL_UART_Transmit(&huart3, (uint8_t *)(command_ok ? "ACK\n" : "ERR\n"), 4U, 100U);
       }
       else if (rx_idx < UART_RX_BUF_SIZE - 1U)
       {

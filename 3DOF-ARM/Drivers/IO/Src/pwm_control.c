@@ -16,6 +16,8 @@ static const uint32_t slew_channel_ids[SLEW_CHANNEL_COUNT] = {
 static uint16_t slew_current[SLEW_CHANNEL_COUNT];
 static uint16_t slew_target[SLEW_CHANNEL_COUNT];
 static uint8_t PWM_Control_SlewIndex(uint32_t channel);
+static uint16_t PWM_Control_ClampAngle(uint16_t angle_degrees);
+static uint32_t PWM_Control_CompareFromAngle(uint16_t angle_degrees);
 
 /************************* Servo Functions ***********************/  
 void SetAllServoAngles(uint16_t angle_degrees)
@@ -172,12 +174,23 @@ static uint32_t PWM_Control_CompareFromAngle(uint16_t angle_degrees)
 
 HAL_StatusTypeDef PWM_Control_SetAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t angle_degrees)
 {
+  uint16_t clamped;
+  uint8_t idx;
+
   if ((htim == 0) || (PWM_Control_ChannelIsSupported(channel) == 0U))
   {
     return HAL_ERROR;
   }
 
-  __HAL_TIM_SET_COMPARE(htim, channel, PWM_Control_CompareFromAngle(angle_degrees));
+  clamped = PWM_Control_ClampAngle(angle_degrees);
+  idx = PWM_Control_SlewIndex(channel);
+  if (idx < SLEW_CHANNEL_COUNT)
+  {
+    slew_current[idx] = clamped;
+    slew_target[idx] = clamped;
+  }
+
+  __HAL_TIM_SET_COMPARE(htim, channel, PWM_Control_CompareFromAngle(clamped));
 
   return HAL_OK;
 }
@@ -193,4 +206,3 @@ static uint8_t PWM_Control_SlewIndex(uint32_t channel)
   }
   return SLEW_CHANNEL_COUNT;
 }
-
