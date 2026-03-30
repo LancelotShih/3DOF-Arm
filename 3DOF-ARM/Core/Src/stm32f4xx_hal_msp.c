@@ -80,6 +80,97 @@ void HAL_MspInit(void)
 }
 
 /**
+  * @brief I2C MSP Initialization
+  * This function configures the hardware resources used in this example
+  * @param hi2c: I2C handle pointer
+  * @retval None
+  */
+void HAL_I2C_MspInit(I2C_HandleTypeDef* hi2c)
+{
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+  if(hi2c->Instance==I2C2)
+  {
+    /* USER CODE BEGIN I2C2_MspInit 0 */
+
+    /* USER CODE END I2C2_MspInit 0 */
+
+    __HAL_RCC_GPIOF_CLK_ENABLE();
+    /**I2C2 GPIO Configuration
+    PF0     ------> I2C2_SDA
+    PF1     ------> I2C2_SCL
+    */
+    GPIO_InitStruct.Pin = OLED_SDA_Pin|OLED_SCL_Pin;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+    GPIO_InitStruct.Alternate = GPIO_AF4_I2C2;
+    HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
+
+    /* Peripheral clock enable */
+    __HAL_RCC_I2C2_CLK_ENABLE();
+    /* USER CODE BEGIN I2C2_MspInit 1 */
+
+    /* DMA1 clock (shared across streams, safe to enable multiple times) */
+    __HAL_RCC_DMA1_CLK_ENABLE();
+
+    /* I2C2 TX -> DMA1 Stream 7 Channel 7 (STM32F446 DM00135183 Table 42) */
+    extern DMA_HandleTypeDef hdma_i2c2_tx;
+    hdma_i2c2_tx.Instance                 = DMA1_Stream7;
+    hdma_i2c2_tx.Init.Channel             = DMA_CHANNEL_7;
+    hdma_i2c2_tx.Init.Direction           = DMA_MEMORY_TO_PERIPH;
+    hdma_i2c2_tx.Init.PeriphInc           = DMA_PINC_DISABLE;
+    hdma_i2c2_tx.Init.MemInc              = DMA_MINC_ENABLE;
+    hdma_i2c2_tx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+    hdma_i2c2_tx.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
+    hdma_i2c2_tx.Init.Mode                = DMA_NORMAL;
+    hdma_i2c2_tx.Init.Priority            = DMA_PRIORITY_LOW;
+    hdma_i2c2_tx.Init.FIFOMode            = DMA_FIFOMODE_DISABLE;
+    HAL_DMA_Init(&hdma_i2c2_tx);
+    __HAL_LINKDMA(hi2c, hdmatx, hdma_i2c2_tx);
+
+    /* DMA stream interrupt — lower priority than SysTick (0) */
+    HAL_NVIC_SetPriority(DMA1_Stream7_IRQn, 5U, 0U);
+    HAL_NVIC_EnableIRQ(DMA1_Stream7_IRQn);
+
+    /* I2C event/error interrupts required by HAL DMA transfer mode */
+    HAL_NVIC_SetPriority(I2C2_EV_IRQn, 5U, 0U);
+    HAL_NVIC_EnableIRQ(I2C2_EV_IRQn);
+    HAL_NVIC_SetPriority(I2C2_ER_IRQn, 5U, 0U);
+    HAL_NVIC_EnableIRQ(I2C2_ER_IRQn);
+
+    /* USER CODE END I2C2_MspInit 1 */
+  }
+}
+
+/**
+  * @brief I2C MSP De-Initialization
+  * This function freeze the hardware resources used in this example
+  * @param hi2c: I2C handle pointer
+  * @retval None
+  */
+void HAL_I2C_MspDeInit(I2C_HandleTypeDef* hi2c)
+{
+  if(hi2c->Instance==I2C2)
+  {
+    /* USER CODE BEGIN I2C2_MspDeInit 0 */
+
+    /* USER CODE END I2C2_MspDeInit 0 */
+    /* Peripheral clock disable */
+    __HAL_RCC_I2C2_CLK_DISABLE();
+
+    /**I2C2 GPIO Configuration
+    PF0     ------> I2C2_SDA
+    PF1     ------> I2C2_SCL
+    */
+    HAL_GPIO_DeInit(GPIOF, OLED_SDA_Pin|OLED_SCL_Pin);
+
+    /* USER CODE BEGIN I2C2_MspDeInit 1 */
+
+    /* USER CODE END I2C2_MspDeInit 1 */
+  }
+}
+
+/**
   * @brief TIM_Base MSP Initialization
   * This function configures the hardware resources used in this example
   * @param htim_base: TIM_Base handle pointer

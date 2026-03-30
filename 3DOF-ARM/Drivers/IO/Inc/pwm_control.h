@@ -11,7 +11,7 @@
 #define PWM_CONTROL_RESET_BASE_ANGLE_DEGREES 90U
 #define PWM_CONTROL_RESET_HEIGHT_ANGLE_DEGREES 90U
 #define PWM_CONTROL_RESET_DEPTH_ANGLE_DEGREES 102U
-#define PWM_CONTROL_RESET_CLAW_ANGLE_DEGREES 0U
+#define PWM_CONTROL_RESET_CLAW_ANGLE_DEGREES 75U
 #define PWM_CONTROL_SLEW_STEP_DEG    1U
 #define PWM_CONTROL_SLEW_INTERVAL_MS 20U
 
@@ -22,5 +22,6 @@ uint16_t PWM_Control_NextSweepAngle(uint16_t current_angle_degrees, int8_t *dire
 void SetAllServoAngles(uint16_t angle_degrees);
 void PWM_Control_SetTarget(uint32_t channel, uint16_t angle_degrees);
 void PWM_Control_SlewUpdate(TIM_HandleTypeDef *htim);
+uint16_t PWM_Control_GetCurrentAngle(uint32_t channel);
 
 #endif /* PWM_CONTROL_H */

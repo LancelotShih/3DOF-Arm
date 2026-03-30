@@ -148,6 +148,18 @@ void PWM_Control_SetTarget(uint32_t channel, uint16_t angle_degrees)
   }
 }
 
+uint16_t PWM_Control_GetCurrentAngle(uint32_t channel)
+{
+  uint8_t idx = PWM_Control_SlewIndex(channel);
+
+  if (idx < SLEW_CHANNEL_COUNT)
+  {
+    return slew_current[idx];
+  }
+
+  return PWM_CONTROL_MIN_ANGLE_DEGREES;
+}
+
 HAL_StatusTypeDef PWM_Control_ResetAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t reset_angle_degrees)
 {
   return PWM_Control_SetAngle(htim, channel, reset_angle_degrees);
