@@ -110,6 +110,34 @@ void HAL_I2C_MspInit(I2C_HandleTypeDef* hi2c)
     __HAL_RCC_I2C2_CLK_ENABLE();
     /* USER CODE BEGIN I2C2_MspInit 1 */
 
+    /* DMA1 clock (shared across streams, safe to enable multiple times) */
+    __HAL_RCC_DMA1_CLK_ENABLE();
+
+    /* I2C2 TX -> DMA1 Stream 7 Channel 7 (STM32F446 DM00135183 Table 42) */
+    extern DMA_HandleTypeDef hdma_i2c2_tx;
+    hdma_i2c2_tx.Instance                 = DMA1_Stream7;
+    hdma_i2c2_tx.Init.Channel             = DMA_CHANNEL_7;
+    hdma_i2c2_tx.Init.Direction           = DMA_MEMORY_TO_PERIPH;
+    hdma_i2c2_tx.Init.PeriphInc           = DMA_PINC_DISABLE;
+    hdma_i2c2_tx.Init.MemInc              = DMA_MINC_ENABLE;
+    hdma_i2c2_tx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+    hdma_i2c2_tx.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
+    hdma_i2c2_tx.Init.Mode                = DMA_NORMAL;
+    hdma_i2c2_tx.Init.Priority            = DMA_PRIORITY_LOW;
+    hdma_i2c2_tx.Init.FIFOMode            = DMA_FIFOMODE_DISABLE;
+    HAL_DMA_Init(&hdma_i2c2_tx);
+    __HAL_LINKDMA(hi2c, hdmatx, hdma_i2c2_tx);
+
+    /* DMA stream interrupt — lower priority than SysTick (0) */
+    HAL_NVIC_SetPriority(DMA1_Stream7_IRQn, 5U, 0U);
+    HAL_NVIC_EnableIRQ(DMA1_Stream7_IRQn);
+
+    /* I2C event/error interrupts required by HAL DMA transfer mode */
+    HAL_NVIC_SetPriority(I2C2_EV_IRQn, 5U, 0U);
+    HAL_NVIC_EnableIRQ(I2C2_EV_IRQn);
+    HAL_NVIC_SetPriority(I2C2_ER_IRQn, 5U, 0U);
+    HAL_NVIC_EnableIRQ(I2C2_ER_IRQn);
+
     /* USER CODE END I2C2_MspInit 1 */
   }
 }

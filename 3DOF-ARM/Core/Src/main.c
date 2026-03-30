@@ -46,6 +46,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c2;
+DMA_HandleTypeDef hdma_i2c2_tx;
 
 TIM_HandleTypeDef htim3;
 
@@ -142,6 +143,8 @@ int main(void)
       HAL_UART_Transmit(&huart3, (uint8_t *)"READY\n", 6U, 100U);
       last_ready_tick = HAL_GetTick();
     }
+
+    SSD1306_Process();
 
     if ((HAL_GetTick() - last_slew_tick) >= PWM_CONTROL_SLEW_INTERVAL_MS)
     {
@@ -411,7 +414,7 @@ static void UpdateServoDisplay(void)
     PWM_Control_GetCurrentAngle(TIM_CHANNEL_4)
   };
 
-  if (OLED_Status_ShowAngles(angles) != HAL_OK)
+  if (OLED_Status_ShowAngles(angles) == HAL_ERROR)
   {
     oled_ready = 0U;
   }

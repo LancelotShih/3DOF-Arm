@@ -20,10 +20,12 @@ def list_ports():
 # Per-channel config: (ch_num, label, default_angle, min_angle, max_angle)
 CHANNELS = [
     (1, "Base",   90,  0,   180),
-    (2, "Height", 90,  40,  120),
-    (3, "Depth",  102, 55,  150),
-    (4, "Claw",   0,   0,   180),  # TODO: update limits once the clamp servo is installed properly (clamp screws are currently missing)
+    (2, "Height", 90,  0,  120),
+    (3, "Depth",  102, 55,  180),
 ]
+
+CLAW_OPEN_DEG  = 75
+CLAW_CLOSE_DEG = 18
 
 
 class ServoGUI:
@@ -35,6 +37,7 @@ class ServoGUI:
         self.root.resizable(False, False)
         self.ser = None
         self.channel_vars = {}  # ch_num -> IntVar
+        self._claw_open = True  # True = open (75°), False = closed (30°)
 
         self._build_connection_frame()
         self._build_servo_frame()
@@ -95,10 +98,21 @@ class ServoGUI:
             btn.grid(row=row_idx, column=3)
             self.send_btns.append(btn)
 
+        # Claw toggle row
+        claw_row = len(CHANNELS)
+        ttk.Label(frame, text="Ch 4 – Claw:", width=14, anchor="w").grid(
+            row=claw_row, column=0, sticky="w", pady=3
+        )
+        self.claw_btn = ttk.Button(
+            frame, text="Open", command=self._toggle_claw, state="disabled"
+        )
+        self.claw_btn.grid(row=claw_row, column=1, sticky="w", padx=(8, 0))
+        self.send_btns.append(self.claw_btn)
+
         self.reset_btn = ttk.Button(
             frame, text="Reset to Defaults", command=self._reset_to_defaults, state="disabled"
         )
-        self.reset_btn.grid(row=len(CHANNELS), column=0, columnspan=4, pady=(8, 2))
+        self.reset_btn.grid(row=claw_row + 1, column=0, columnspan=4, pady=(8, 2))
 
     def _build_ik_frame(self):
         frame = ttk.LabelFrame(self.root, text="IK Control (x, y, z in mm)", padding=8)
@@ -226,6 +240,12 @@ class ServoGUI:
         for ch_num, _label, default, _lo, _hi in CHANNELS:
             self.channel_vars[ch_num].set(default)
         self._send_reset_step(list(CHANNELS), 0)
+
+    def _toggle_claw(self):
+        self._claw_open = not self._claw_open
+        angle = CLAW_OPEN_DEG if self._claw_open else CLAW_CLOSE_DEG
+        self.claw_btn.config(text="Open" if self._claw_open else "Close")
+        self._send_command(4, angle, CLAW_CLOSE_DEG, CLAW_OPEN_DEG)
 
     def _send_staggered(self, commands, index):
         if index >= len(commands):

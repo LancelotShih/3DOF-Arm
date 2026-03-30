@@ -20,6 +20,7 @@ typedef enum {
 HAL_StatusTypeDef SSD1306_Init(void);
 void SSD1306_Fill(SSD1306_COLOR_t color);
 HAL_StatusTypeDef SSD1306_UpdateScreen(void);
+void SSD1306_Process(void);
 HAL_StatusTypeDef SSD1306_SetPixel(uint16_t x, uint16_t y, SSD1306_COLOR_t color);
 HAL_StatusTypeDef SSD1306_Putc(uint16_t x, uint16_t y, char ch, const FontDef_t *font);
 HAL_StatusTypeDef SSD1306_Puts(uint16_t x, uint16_t y, const char *str, const FontDef_t *font);

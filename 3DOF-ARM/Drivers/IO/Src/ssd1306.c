@@ -9,6 +9,27 @@ extern I2C_HandleTypeDef hi2c2;
 
 static uint8_t SSD1306_Buffer[SSD1306_WIDTH * SSD1306_HEIGHT / 8U];
 
+/* DMA non-blocking screen update state machine.
+ * HAL_I2C_Master_Transmit_DMA must NEVER be called from inside the I2C EV
+ * IRQ handler (where MasterTxCpltCallback fires on STM32F4).  Doing so starts
+ * a new START condition while still inside the previous transaction's ISR,
+ * corrupting the HAL I2C state machine and causing a HardFault.
+ * Fix: the callback only advances state to a *_PENDING value; the actual DMA
+ * kick-off happens in SSD1306_Process(), called from the main loop. */
+typedef enum {
+  SSD1306_TX_IDLE         = 0,
+  SSD1306_TX_CMD_PENDING,   /* main loop should start CMD DMA  */
+  SSD1306_TX_CMD_BUSY,      /* CMD DMA in flight               */
+  SSD1306_TX_DATA_PENDING,  /* main loop should start DATA DMA */
+  SSD1306_TX_DATA_BUSY      /* DATA DMA in flight              */
+} SSD1306_TxState_t;
+
+static volatile SSD1306_TxState_t s_tx_state = SSD1306_TX_IDLE;
+static volatile uint8_t           s_tx_page   = 0U;
+/* These buffers MUST be static — DMA reads them after the function returns. */
+static uint8_t s_cmd_buf[4U];
+static uint8_t s_data_buf[SSD1306_WIDTH + 1U];
+
 static const uint8_t SSD1306_InitSequence[] = {
   0xAE, 0x20, 0x10, 0xB0, 0xC8, 0x00, 0x10, 0x40, 0x81, 0xFF,
   0xA1, 0xA6, 0xA8, 0x3F, 0xA4, 0xD3, 0x00, 0xD5, 0xF0, 0xD9,
@@ -54,23 +75,13 @@ void SSD1306_Fill(SSD1306_COLOR_t color)
 
 HAL_StatusTypeDef SSD1306_UpdateScreen(void)
 {
-  uint8_t page;
-
-  for (page = 0U; page < 8U; page++)
+  if (s_tx_state != SSD1306_TX_IDLE)
   {
-    uint8_t commands[3] = {(uint8_t)(0xB0U + page), 0x00U, 0x10U};
-
-    if (SSD1306_Write(0x00U, commands, sizeof(commands)) != HAL_OK)
-    {
-      return HAL_ERROR;
-    }
-
-    if (SSD1306_Write(0x40U, &SSD1306_Buffer[SSD1306_WIDTH * page], SSD1306_WIDTH) != HAL_OK)
-    {
-      return HAL_ERROR;
-    }
+    return HAL_BUSY;
   }
 
+  s_tx_page  = 0U;
+  s_tx_state = SSD1306_TX_CMD_PENDING;
   return HAL_OK;
 }
 
@@ -149,4 +160,63 @@ HAL_StatusTypeDef SSD1306_Puts(uint16_t x, uint16_t y, const char *str, const Fo
   }
 
   return HAL_OK;
+}
+
+/* Called from the main loop — kicks off the next pending DMA transfer.
+ * HAL_I2C_Master_Transmit_DMA must NOT be called from inside the I2C EV ISR
+ * (where MasterTxCpltCallback fires), so the callback only sets a PENDING
+ * state and this function does the actual HAL call safely from thread context. */
+void SSD1306_Process(void)
+{
+  if (s_tx_state == SSD1306_TX_CMD_PENDING)
+  {
+    s_cmd_buf[0] = 0x00U;
+    s_cmd_buf[1] = (uint8_t)(0xB0U + s_tx_page);
+    s_cmd_buf[2] = 0x00U;
+    s_cmd_buf[3] = 0x10U;
+    s_tx_state = SSD1306_TX_CMD_BUSY;
+    if (HAL_I2C_Master_Transmit_DMA(&hi2c2, SSD1306_I2C_ADDR, s_cmd_buf, 4U) != HAL_OK)
+    {
+      s_tx_state = SSD1306_TX_IDLE;
+    }
+  }
+  else if (s_tx_state == SSD1306_TX_DATA_PENDING)
+  {
+    s_data_buf[0] = 0x40U;
+    memcpy(&s_data_buf[1], &SSD1306_Buffer[SSD1306_WIDTH * s_tx_page], SSD1306_WIDTH);
+    s_tx_state = SSD1306_TX_DATA_BUSY;
+    if (HAL_I2C_Master_Transmit_DMA(&hi2c2, SSD1306_I2C_ADDR, s_data_buf, SSD1306_WIDTH + 1U) != HAL_OK)
+    {
+      s_tx_state = SSD1306_TX_IDLE;
+    }
+  }
+}
+
+/* Called from the I2C EV ISR after each transfer completes.
+ * Only advances state — does NOT call any HAL function. */
+void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *hi2c)
+{
+  if (hi2c->Instance != I2C2)
+  {
+    return;
+  }
+
+  if (s_tx_state == SSD1306_TX_CMD_BUSY)
+  {
+    s_tx_state = SSD1306_TX_DATA_PENDING;
+  }
+  else if (s_tx_state == SSD1306_TX_DATA_BUSY)
+  {
+    s_tx_page++;
+    s_tx_state = (s_tx_page < 8U) ? SSD1306_TX_CMD_PENDING : SSD1306_TX_IDLE;
+  }
+}
+
+/* Reset to idle on I2C error so the state machine doesn't get stuck. */
+void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
+{
+  if (hi2c->Instance == I2C2)
+  {
+    s_tx_state = SSD1306_TX_IDLE;
+  }
 }
